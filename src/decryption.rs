@@ -42,6 +42,36 @@ impl EncryptedPasswordAttributePrefixInfo {
     }
 }
 
+struct EncryptedPasswordAttribute {
+    _prefix: EncryptedPasswordAttributePrefixInfo,
+    data: Vec<u8>,
+}
+
+impl EncryptedPasswordAttribute {
+    /// will convert the encrypted password attribute
+    ///
+    /// The first 16 bytes of the attribute are the PrefixInfo and will be parsed.
+    ///
+    /// The rest is the data. The data will be checked for size.
+    ///
+    /// The data will __not__ be decrypted at this staged yet.
+    ///
+    /// # Panics
+    /// On invalid `data.len()`
+    fn new(buf: &[u8]) -> Self {
+        let prefix = EncryptedPasswordAttributePrefixInfo::new(buf);
+        let encrypted_buffer_size = prefix.encrypted_buffer_size;
+        assert!(
+            buf.len() >= 16 + encrypted_buffer_size,
+            "buffer should be at least prefix len + var password len"
+        );
+        Self {
+            _prefix: prefix,
+            data: buf[16..(16 + encrypted_buffer_size)].to_owned(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod prefix_tests {
     use super::EncryptedPasswordAttributePrefixInfo;
