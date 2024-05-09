@@ -27,18 +27,19 @@ impl EncryptedPasswordAttributePrefixInfo {
     /// ```
     /// All numbers are 32 bit numbers in LSB byte order
     ///
-    /// # Panics
-    /// panics on inputs with `buf.len() < 16`
+    /// # Returns None on inputs with `buf.len() < 16`
     ///
-    fn new(buf: &[u8]) -> Self {
-        assert!(buf.len() >= 16, "buffer not long enough");
+    fn try_from(buf: &[u8]) -> Option<Self> {
+        if buf.len() < 16 {
+            return None;
+        }
         let parts: Vec<u32> = buf.chunks(4).take(4).flat_map(convert_to_uint32).collect();
         let time_offset: i64 = ((parts[0] as i64) << 32) | parts[1] as i64;
-        Self {
+        Some(Self {
             _timestamp: filetime_to_datetime(time_offset),
             encrypted_buffer_size: parts[2] as usize,
             _flags_reserved: parts[3],
-        }
+        })
     }
 }
 
@@ -55,20 +56,22 @@ impl EncryptedPasswordAttribute {
     /// The rest is the data. The data will be checked for size.
     ///
     /// The data will __not__ be decrypted at this staged yet.
-    ///
-    /// # Panics
-    /// On invalid `data.len()`
-    fn new(buf: &[u8]) -> Self {
-        let prefix = EncryptedPasswordAttributePrefixInfo::new(buf);
+    fn try_from(buf: &[u8]) -> Option<Self> {
+        let prefix_opt = EncryptedPasswordAttributePrefixInfo::try_from(buf);
+        if prefix_opt.is_none() {
+            return None;
+        }
+        let prefix = prefix_opt.expect("prefix is Some(prefix)");
         let encrypted_buffer_size = prefix.encrypted_buffer_size;
-        assert!(
-            buf.len() >= 16 + encrypted_buffer_size,
-            "buffer should be at least prefix len + var password len"
-        );
-        Self {
+
+        if buf.len() != encrypted_buffer_size + 16 {
+            // Whole blob is too short
+            return None;
+        }
+        Some(Self {
             _prefix: prefix,
             data: buf[16..(16 + encrypted_buffer_size)].to_owned(),
-        }
+        })
     }
 }
 
@@ -103,6 +106,8 @@ mod prefix_tests {
 
         let reserved: [u8; 4] = [0xEF, 0xBE, 0xAD, 0xDE];
         header.extend_from_slice(&reserved);
-        assert_eq!(EncryptedPasswordAttributePrefixInfo::new(&header), test)
+        let res = EncryptedPasswordAttributePrefixInfo::try_from(&header);
+        assert!(res.is_some());
+        assert_eq!(res.expect("res is some"), test)
     }
 }
