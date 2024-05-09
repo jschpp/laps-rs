@@ -1,3 +1,4 @@
+mod decryption;
 mod error;
 mod helpers;
 
