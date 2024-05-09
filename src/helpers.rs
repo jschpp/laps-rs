@@ -7,6 +7,13 @@ pub enum ConversionError {
     InputTooLarge,
 }
 
+/// Converts a slice of u8 to a u32
+///
+/// This operates in LSB to array index.
+/// Which means that `data[0]` will be the LSB
+///
+/// # Errors
+/// Will `Err()` on inputs containing more than 4 bytes
 pub fn convert_to_uint32(data: &[u8]) -> Result<u32, ConversionError> {
     if data.len() > 4 {
         return Err(ConversionError::InputTooLarge);
@@ -33,7 +40,7 @@ pub fn filetime_to_datetime(file_time: i64) -> DateTime<Utc> {
 }
 
 #[cfg(test)]
-mod tests {
+mod uint_tests {
     use super::*;
     use rstest::rstest;
 
@@ -45,7 +52,7 @@ mod tests {
     #[case(&[0x1, 0x1, 0x1, 0x0], 0x10101)]
     #[case(&[0x1, 0x1, 0x1, 0x1], 0x1010101)]
     #[case(&[0xFF, 0xFF, 0xFF, 0xFF], u32::MAX)]
-    fn uint32_conversion(#[case] input: &[u8], #[case] expected: u32) {
+    fn conversion(#[case] input: &[u8], #[case] expected: u32) {
         assert_eq!(convert_to_uint32(&input).expect("valid inputs"), expected)
     }
 
