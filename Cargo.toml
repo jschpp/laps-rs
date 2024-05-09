@@ -1,0 +1,15 @@
+[package]
+name = "laps"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ldap3 = { version = "0.11.3", features = ["gssapi", "tls", "sync"] }
+serde = { version = "1.0.201", features = ["derive"] }
+serde_json = "1.0.117"
+thiserror = "1.0.60"
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
+windows-sys = { version = "0.52.0", features = ["Win32_Security", "Win32_Foundation"] }
