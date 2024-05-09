@@ -1,3 +1,4 @@
+mod error;
 mod helpers;
 
 pub fn add(left: usize, right: usize) -> usize {

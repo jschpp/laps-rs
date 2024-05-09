@@ -1,11 +1,5 @@
+use super::error::ConversionError;
 use chrono::{DateTime, TimeDelta, Utc};
-use thiserror::Error;
-
-#[derive(Debug, Error, PartialEq)]
-pub enum ConversionError {
-    #[error("Input too large")]
-    InputTooLarge,
-}
 
 /// Converts a slice of u8 to a u32
 ///
