@@ -1,3 +1,4 @@
+use chrono::{DateTime, TimeDelta, Utc};
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
@@ -14,6 +15,21 @@ pub fn convert_to_uint32(data: &[u8]) -> Result<u32, ConversionError> {
         .iter()
         .enumerate()
         .fold(0, |acc, (idx, n)| acc | ((*n as u32) << (idx * 8) as u32)))
+}
+
+const WINDOWS_EPOCH: &str = "1601-01-01T00:00:00-00:00";
+
+/// Converts from a Windows filetime to a Datetime
+pub fn filetime_to_datetime(file_time: i64) -> DateTime<Utc> {
+    let epoch = DateTime::parse_from_rfc3339(WINDOWS_EPOCH)
+        .expect("Windows Epoch is a valid times")
+        .to_utc();
+
+    // windows filetime counts the number of 100ns intervals since the WINDOWS_EPOCH
+    let td = TimeDelta::microseconds(file_time / 10);
+    epoch
+        .checked_add_signed(td)
+        .expect("should still be a valid date")
 }
 
 #[cfg(test)]
@@ -40,5 +56,18 @@ mod tests {
         let e = convert_to_uint32(&input);
         assert!(e.is_err());
         assert_eq!(e, Err(ConversionError::InputTooLarge));
+    }
+}
+
+mod date_tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case(133596792000000000, DateTime::<Utc>::from_timestamp_nanos(1715205600000000000))]
+    #[case(116444736000000000, DateTime::<Utc>::from_timestamp_nanos(0))]
+    #[case(103821696000000000, DateTime::<Utc>::from_timestamp_nanos(-1262304000000000000))]
+    fn conversion(#[case] input: i64, #[case] expected: chrono::DateTime<Utc>) {
+        assert_eq!(filetime_to_datetime(input), expected)
     }
 }
