@@ -422,7 +422,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "laps"
+name = "laps-rs"
 version = "0.1.0"
 dependencies = [
  "chrono",
