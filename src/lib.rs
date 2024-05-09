@@ -1,6 +1,7 @@
 mod decryption;
 mod error;
 mod helpers;
+mod ldap;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right
