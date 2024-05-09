@@ -1,6 +1,19 @@
 use chrono::{DateTime, Utc};
+use core::panic;
+use std::ptr;
+use windows_sys::Win32::{
+    Foundation::GetLastError,
+    Security::Cryptography::{NCryptUnprotectSecret, NCRYPT_SILENT_FLAG},
+};
+use windows_sys::{
+    core::HRESULT,
+    Win32::Foundation::{LocalFree, HLOCAL},
+};
 
-use crate::helpers::{convert_to_uint32, filetime_to_datetime};
+use crate::{
+    error::DecryptionError,
+    helpers::{convert_to_uint32, filetime_to_datetime},
+};
 
 #[derive(Debug, PartialEq)]
 struct EncryptedPasswordAttributePrefixInfo {
@@ -73,6 +86,105 @@ impl EncryptedPasswordAttribute {
             data: buf[16..(16 + encrypted_buffer_size)].to_owned(),
         })
     }
+}
+
+/// uses DPAPI NG to decrypt an encrypted LAPS password BLOB
+///
+/// This function uses the credentials of the current process/user.
+///
+/// This function calls a bunch of `unsafe` internal windows functions.
+///
+/// This function should be safe to call. Every return is checked for errors.
+///
+/// # Panics
+/// In case that the LocalFree call used to free the temporary buffer allocated by
+/// NCryptUnprotectSecret returns an error this function will panic and then leak memory
+pub fn decrypt_password_blob_ng(blob: &[u8]) -> Result<String, DecryptionError> {
+    let Some(mut attr) = EncryptedPasswordAttribute::try_from(blob) else {
+        return Err(DecryptionError::InvalidBufLen);
+    };
+    // at this point we have a parsed well defined header
+
+    // get the pointer to the data blob to hand to NCryptUnprotectSecret
+    // this must be mut since NCryptUnprotectSecret expect a *mut
+    let buf_ptr = attr.data.as_mut_ptr();
+    let buf_len = attr.data.len() as u32;
+
+    // this pointer will be set by NCryptUnprotectSecret and will then point to the array of the encrypted bytes
+    let buf_out_ptr: *mut *mut u8 = &mut ptr::null_mut();
+    // this will be set by NCryptUnprotectSecret and will cointain the size of the encrypted buffer
+    let mut buf_out_len = 0_u32;
+
+    // call to NCryptUnprotectSecret
+    // https://learn.microsoft.com/en-us/windows/win32/api/ncryptprotect/nf-ncryptprotect-ncryptunprotectsecret
+    // SECURITY_STATUS NCryptUnprotectSecret(
+    //   [out, optional] NCRYPT_DESCRIPTOR_HANDLE *phDescriptor, Pointer to the protection descriptor handle.
+    //   [in]            DWORD                    dwFlags,
+    //   [in]            const BYTE               *pbProtectedBlob,
+    //                   ULONG                    cbProtectedBlob,
+    //   [in, optional]  const NCRYPT_ALLOC_PARA  *pMemPara,
+    //   [in, optional]  HWND                     hWnd,
+    //   [out]           BYTE                     **ppbData,
+    //   [out]           ULONG                    *pcbData
+    // );
+    let uprotect_result: HRESULT = unsafe {
+        NCryptUnprotectSecret(
+            ptr::null_mut(),
+            NCRYPT_SILENT_FLAG, // Requests that the key service provider not display a user interface.
+            buf_ptr,            // Pointer to an array of bytes that contains the data to decrypt.
+            buf_len, // The number of bytes in the array pointed to by the pbProtectedBlob parameter.
+            ptr::null(), // since this is set to null we need to free the memory ourselves by calling LocalFree
+            0, // Handle to the parent window of the user interface, if any, to be displayed.
+            buf_out_ptr, // Address of a variable that receives a pointer to the decrypted data.
+            &mut buf_out_len, // Pointer to a ULONG variable that contains the size, in bytes, of the decrypted data pointed to by the ppbData variable.
+        )
+    } as _;
+
+    if uprotect_result != 0 {
+        // there was an error decrypting the result
+        // we need to free the memory and then error out
+        unsafe { local_free(buf_out_ptr) };
+        return Err(DecryptionError::DpapiFailedToDecrypt(uprotect_result));
+    }
+
+    // at this point we know both the length of the buffer as well as the location of the buffer
+    let res: Vec<u8> =
+        unsafe { std::slice::from_raw_parts(*buf_out_ptr, buf_out_len as usize) }.to_owned();
+    if res.len() as u32 != buf_out_len {
+        // there was some error within the slice copy process.
+        // we need to free the memory and then error out
+        unsafe { local_free(buf_out_ptr) };
+        return Err(DecryptionError::InvalidBufLen);
+    }
+
+    // at this point we should have copied everything we needed from the buffer and can free the memory allocated by NCryptUnprotectSecret
+    unsafe { local_free(buf_out_ptr) };
+
+    let mut res: Vec<u16> = res
+        .chunks(2)
+        .map(|a| (a[1] as u16) << 2 | a[0] as u16)
+        .collect();
+    assert!(res.last() == Some(&0));
+    let _ = res.pop();
+    let result = String::from_utf16_lossy(&res);
+    Ok(result)
+}
+
+/// will try to free the memory behind the pointer
+///
+/// # Panics
+/// on any error returned from LocalFree
+unsafe fn local_free(buf_out_ptr: *mut *mut u8) {
+    // free memory allocated by NCryptUnprotectSecret
+    // see: parameter `[in, optional] pMemPara` here: https://learn.microsoft.com/en-us/windows/win32/api/ncryptprotect/nf-ncryptprotect-ncryptunprotectsecret#parameters
+    // https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-localfree
+    let ret: HLOCAL = LocalFree(buf_out_ptr as HLOCAL);
+    if !ret.is_null() {
+        let err = unsafe { GetLastError() };
+        // TODO: handle this failure gracefully as to not leak memory.
+        // Since I have no idea how to do this yet, I'll keep this at panicking
+        panic!("Error freeing memory {}", err,);
+    };
 }
 
 #[cfg(test)]
