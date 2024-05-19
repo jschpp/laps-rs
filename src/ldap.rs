@@ -13,6 +13,7 @@ use crate::{
 };
 
 #[derive(Deserialize, Default, Debug)]
+/// LAPS Information
 pub struct MsLapsPassword {
     #[serde(rename(deserialize = "n"))]
     pub username: String,
@@ -63,6 +64,19 @@ where
     deserializer.deserialize_string(FieldVisitor)
 }
 
+/// This will try to retrieve the LAPS password information from Active Directory.
+///
+/// It will look for the following Attributes:
+/// ```plain
+/// msLAPS-Password
+/// msLAPS-EncryptedPassword
+/// msLAPS-PasswordExpirationTime
+/// ```
+/// In the case of a computer having both `msLAPS-Password` and `msLAPS-PasswordExpirationTime`
+/// it will return the password with the longer expiration time.
+///
+/// It will use your current users credential to decrypt the information if it was encrypted.
+/// The decryption uses [`NCryptUnprotectSecret()`](windows_sys::Win32::Security::Cryptography::NCryptUnprotectSecret) in the background
 pub fn retrieve_laps_info(
     computer_name: &str,
     con_settings: AdSettings,
