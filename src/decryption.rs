@@ -88,6 +88,14 @@ impl EncryptedPasswordAttribute {
     }
 }
 
+struct DroppablePointer(*mut *mut u8);
+
+impl Drop for DroppablePointer {
+    fn drop(&mut self) {
+        unsafe { local_free(self.0) }
+    }
+}
+
 /// uses DPAPI NG to decrypt an encrypted LAPS password BLOB
 ///
 /// This function uses the credentials of the current process/user.
@@ -111,7 +119,8 @@ pub fn decrypt_password_blob_ng(blob: &[u8]) -> Result<String, DecryptionError> 
     let buf_len = attr.data.len() as u32;
 
     // this pointer will be set by NCryptUnprotectSecret and will then point to the array of the encrypted bytes
-    let buf_out_ptr: *mut *mut u8 = &mut ptr::null_mut();
+    // let buf_out_ptr: *mut *mut u8 = &mut ptr::null_mut();
+    let buf_out_ptr: DroppablePointer = DroppablePointer(&mut ptr::null_mut());
     // this will be set by NCryptUnprotectSecret and will cointain the size of the encrypted buffer
     let mut buf_out_len = 0_u32;
 
@@ -135,30 +144,26 @@ pub fn decrypt_password_blob_ng(blob: &[u8]) -> Result<String, DecryptionError> 
             buf_len, // The number of bytes in the array pointed to by the pbProtectedBlob parameter.
             ptr::null(), // since this is set to null we need to free the memory ourselves by calling LocalFree
             0, // Handle to the parent window of the user interface, if any, to be displayed.
-            buf_out_ptr, // Address of a variable that receives a pointer to the decrypted data.
+            buf_out_ptr.0, // Address of a variable that receives a pointer to the decrypted data.
             &mut buf_out_len, // Pointer to a ULONG variable that contains the size, in bytes, of the decrypted data pointed to by the ppbData variable.
         )
     } as _;
 
     if uprotect_result != 0 {
         // there was an error decrypting the result
-        // we need to free the memory and then error out
-        unsafe { local_free(buf_out_ptr) };
         return Err(DecryptionError::DpapiFailedToDecrypt(uprotect_result));
     }
 
     // at this point we know both the length of the buffer as well as the location of the buffer
     let res: Vec<u8> =
-        unsafe { std::slice::from_raw_parts(*buf_out_ptr, buf_out_len as usize) }.to_owned();
+        unsafe { std::slice::from_raw_parts(*buf_out_ptr.0, buf_out_len as usize) }.to_owned();
     if res.len() as u32 != buf_out_len {
         // there was some error within the slice copy process.
-        // we need to free the memory and then error out
-        unsafe { local_free(buf_out_ptr) };
         return Err(DecryptionError::InvalidBufLen);
     }
 
     // at this point we should have copied everything we needed from the buffer and can free the memory allocated by NCryptUnprotectSecret
-    unsafe { local_free(buf_out_ptr) };
+    drop(buf_out_ptr);
 
     let mut res: Vec<u16> = res
         .chunks(2)
