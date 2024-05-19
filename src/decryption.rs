@@ -88,10 +88,12 @@ impl EncryptedPasswordAttribute {
     }
 }
 
+/// Wrapper to a raw pointer as to handle gracefully freeing it
 struct DroppablePointer(*mut *mut u8);
 
 impl Drop for DroppablePointer {
     fn drop(&mut self) {
+        // this should only panic in case the pointer was not allocated correctly by NCryptUnprotectSecret
         unsafe { local_free(self.0) }
     }
 }
@@ -178,16 +180,16 @@ pub fn decrypt_password_blob_ng(blob: &[u8]) -> Result<String, DecryptionError> 
 /// will try to free the memory behind the pointer
 ///
 /// # Panics
-/// on any error returned from LocalFree
+/// If given an invalid (not allocated by local allocator) handle
 unsafe fn local_free(buf_out_ptr: *mut *mut u8) {
     // free memory allocated by NCryptUnprotectSecret
     // see: parameter `[in, optional] pMemPara` here: https://learn.microsoft.com/en-us/windows/win32/api/ncryptprotect/nf-ncryptprotect-ncryptunprotectsecret#parameters
     // https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-localfree
     let ret: HLOCAL = LocalFree(buf_out_ptr as HLOCAL);
     if !ret.is_null() {
+        // This will only happen if this function gets called with an invalid memory handle.
+        // so we panic here.
         let err = unsafe { GetLastError() };
-        // TODO: handle this failure gracefully as to not leak memory.
-        // Since I have no idea how to do this yet, I'll keep this at panicking
         panic!("Error freeing memory {}", err,);
     };
 }
