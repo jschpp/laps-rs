@@ -91,6 +91,20 @@ impl EncryptedPasswordAttribute {
 /// Wrapper to a raw pointer as to handle gracefully freeing it
 struct DroppablePointer(*mut *mut u8);
 
+impl DroppablePointer {
+    fn new() -> Self {
+        Self {
+            0: &mut ptr::null_mut(),
+        }
+    }
+}
+
+impl Default for DroppablePointer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Drop for DroppablePointer {
     fn drop(&mut self) {
         // this should only panic in case the pointer was not allocated correctly by NCryptUnprotectSecret
@@ -122,7 +136,7 @@ pub fn decrypt_password_blob_ng(blob: &[u8]) -> Result<String, DecryptionError> 
 
     // this pointer will be set by NCryptUnprotectSecret and will then point to the array of the encrypted bytes
     // let buf_out_ptr: *mut *mut u8 = &mut ptr::null_mut();
-    let buf_out_ptr: DroppablePointer = DroppablePointer(&mut ptr::null_mut());
+    let buf_out_ptr: DroppablePointer = DroppablePointer::default();
     // this will be set by NCryptUnprotectSecret and will cointain the size of the encrypted buffer
     let mut buf_out_len = 0_u32;
 
