@@ -14,6 +14,21 @@ use crate::{
     settings::AdSettings,
 };
 
+#[derive(Deserialize, Debug, Clone, Copy)]
+pub enum LdapProtocol {
+    Secure,
+    Unsecure,
+}
+
+impl ToString for LdapProtocol {
+    fn to_string(&self) -> String {
+        match self {
+            LdapProtocol::Secure => String::from("ldaps"),
+            LdapProtocol::Unsecure => String::from("ldap"),
+        }
+    }
+}
+
 #[derive(Deserialize, Default, Debug)]
 /// LAPS Information
 pub struct MsLapsPassword {
@@ -81,7 +96,7 @@ pub fn retrieve_laps_info(
     con_settings: AdSettings,
 ) -> Result<MsLapsPassword, LapsError> {
     // construct ldap conncection uri
-    let prot = if con_settings.ssl { "ldaps" } else { "ldap" };
+    let prot = con_settings.protocol.to_string();
     let con_str = format!("{}://{}:{}", prot, con_settings.server, con_settings.port);
 
     // bind

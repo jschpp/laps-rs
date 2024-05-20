@@ -1,5 +1,7 @@
 use serde::{de::Visitor, Deserialize, Deserializer};
 
+use crate::ldap::LdapProtocol;
+
 #[derive(Debug, Deserialize, Clone)]
 /// Settings needed by [`ldap3`](mod@ldap3) to successfully connect and search the Active Directory
 pub struct AdSettings {
@@ -7,7 +9,9 @@ pub struct AdSettings {
     pub server: String,
     /// LDAP Port (in most cases either 389 or 636)
     pub port: LdapPort,
-    pub ssl: bool,
+    /// if this is true use the `ldaps:\\` protocol
+    pub protocol: LdapProtocol,
+    /// LDAP search base where to search for the computer
     pub search_base: String,
     /// LDAP Search Scope
     #[serde(deserialize_with = "ldap_scope_deserializer")]
