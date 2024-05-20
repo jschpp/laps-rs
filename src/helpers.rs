@@ -60,6 +60,7 @@ mod uint_tests {
     }
 }
 
+#[cfg(test)]
 mod date_tests {
     use super::*;
     use rstest::rstest;
