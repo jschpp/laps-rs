@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use chrono::{DateTime, Utc};
 use ldap3::{LdapConn, SearchEntry};
 use serde::{
@@ -25,10 +27,7 @@ pub struct MsLapsPassword {
 
 impl PartialOrd for MsLapsPassword {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match self.time.partial_cmp(&other.time) {
-            Some(core::cmp::Ordering::Equal) => {}
-            ord => return ord,
-        }
+        self.time.partial_cmp(&other.time)
     }
 }
 
