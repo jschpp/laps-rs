@@ -20,6 +20,24 @@ pub struct AdSettings {
 
 pub type LdapPort = usize;
 
+impl AdSettings {
+    pub fn new(
+        server: &str,
+        port: LdapPort,
+        protocol: LdapProtocol,
+        search_base: &str,
+        scope: ldap3::Scope,
+    ) -> Self {
+        Self {
+            server: server.to_owned(),
+            port,
+            protocol,
+            search_base: search_base.to_owned(),
+            scope,
+        }
+    }
+}
+
 fn ldap_scope_deserializer<'de, D>(deserializer: D) -> Result<ldap3::Scope, D::Error>
 where
     D: Deserializer<'de>,
