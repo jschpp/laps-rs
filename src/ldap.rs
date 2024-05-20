@@ -6,9 +6,7 @@ use serde::{
 };
 
 use crate::{
-    decryption::decrypt_password_blob_ng,
-    error::{ConversionError, LapsError},
-    helpers::filetime_to_datetime,
+    decryption::decrypt_password_blob_ng, error::LapsError, helpers::filetime_to_datetime,
     settings::AdSettings,
 };
 
@@ -77,6 +75,9 @@ where
 ///
 /// It will use your current users credential to decrypt the information if it was encrypted.
 /// The decryption uses [`NCryptUnprotectSecret()`](windows_sys::Win32::Security::Cryptography::NCryptUnprotectSecret) in the background
+///
+/// # Panics
+/// This will panic if the password attributes within the AD are not valid JSON
 pub fn retrieve_laps_info(
     computer_name: &str,
     con_settings: AdSettings,
@@ -127,20 +128,10 @@ pub fn retrieve_laps_info(
 
     // At this point it could be the case that a single computer has an encrypted and an unencrypted password.
     // we need to take the one with the longer ExpirationTime
-
-    let ms_laps_password: Option<MsLapsPassword> = if entry.attrs.contains_key("msLAPS-Password") {
-        let blob = entry.attrs["msLAPS-Password"]
-            .first()
-            .expect("at least one entry should exist");
-        let Ok(ms_laps_password) = serde_json::from_str(blob) else {
-            return Err(LapsError::ConversionError(ConversionError::Other(
-                String::from("error parsing json"),
-            )));
-        };
-        ms_laps_password
-    } else {
-        None
-    };
+    let ms_laps_password = entry.attrs["msLAPS-Password"].first().map(|json_str| {
+        serde_json::from_str::<MsLapsPassword>(json_str)
+            .expect("msLAPS-Password is a valid JSON String")
+    });
 
     let ms_laps_encrypted_password: Option<MsLapsPassword> =
         if entry.bin_attrs.contains_key("msLAPS-EncryptedPassword") {
@@ -152,12 +143,10 @@ pub fn retrieve_laps_info(
                 Ok(value) => value,
                 Err(e) => return Err(LapsError::DecryptionError(e)),
             };
-            let Ok(ms_laps_encrypted_password) = serde_json::from_str(&decrypted_blob) else {
-                return Err(LapsError::ConversionError(ConversionError::Other(
-                    String::from("error parsing json"),
-                )));
-            };
-            Some(ms_laps_encrypted_password)
+            Some(
+                serde_json::from_str(&decrypted_blob)
+                    .expect("The decrypted msLAPS-EncryptedPassword is a valid JSON String"),
+            )
         } else {
             None
         };
