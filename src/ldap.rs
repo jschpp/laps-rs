@@ -127,8 +127,10 @@ pub fn retrieve_laps_info(
         ));
     };
 
-    let Ok((rs, _res)) = search_result.success() else {
-        return Err(LapsError::LdapError(search_result.1.to_string()));
+    let search_result = search_result.success();
+    let rs = match search_result {
+        Ok((rs, _res)) => rs,
+        Err(e) => return Err(LapsError::LdapError(e.to_string())),
     };
 
     if rs.len() != 1 {
