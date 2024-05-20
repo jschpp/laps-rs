@@ -1,5 +1,3 @@
-use std::cmp::Ordering;
-
 use chrono::{DateTime, Utc};
 use ldap3::{LdapConn, SearchEntry};
 use serde::{

@@ -70,11 +70,7 @@ impl EncryptedPasswordAttribute {
     ///
     /// The data will __not__ be decrypted at this staged yet.
     fn try_from(buf: &[u8]) -> Option<Self> {
-        let prefix_opt = EncryptedPasswordAttributePrefixInfo::try_from(buf);
-        if prefix_opt.is_none() {
-            return None;
-        }
-        let prefix = prefix_opt.expect("prefix is Some(prefix)");
+        let prefix = EncryptedPasswordAttributePrefixInfo::try_from(buf)?;
         let encrypted_buffer_size = prefix.encrypted_buffer_size;
 
         if buf.len() != encrypted_buffer_size + 16 {
@@ -93,9 +89,7 @@ struct DroppablePointer(*mut *mut u8);
 
 impl DroppablePointer {
     fn new() -> Self {
-        Self {
-            0: &mut ptr::null_mut(),
-        }
+        Self(&mut ptr::null_mut())
     }
 }
 
