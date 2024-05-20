@@ -119,10 +119,6 @@ impl Drop for DroppablePointer {
 /// This function calls a bunch of `unsafe` internal windows functions.
 ///
 /// This function should be safe to call. Every return is checked for errors.
-///
-/// # Panics
-/// In case that the LocalFree call used to free the temporary buffer allocated by
-/// NCryptUnprotectSecret returns an error this function will panic and then leak memory
 pub fn decrypt_password_blob_ng(blob: &[u8]) -> Result<String, DecryptionError> {
     let Some(mut attr) = EncryptedPasswordAttribute::try_from(blob) else {
         return Err(DecryptionError::InvalidBufLen);

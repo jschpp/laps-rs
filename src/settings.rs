@@ -1,11 +1,15 @@
 use serde::{de::Visitor, Deserialize, Deserializer};
 
 #[derive(Debug, Deserialize, Clone)]
+/// Settings needed by [`ldap3`](mod@ldap3) to successfully connect and search the Active Directory
 pub struct AdSettings {
+    /// Server FQDN
     pub server: String,
+    /// LDAP Port (in most cases either 389 or 636)
     pub port: LdapPort,
     pub ssl: bool,
     pub search_base: String,
+    /// LDAP Search Scope
     #[serde(deserialize_with = "ldap_scope_deserializer")]
     pub scope: ldap3::Scope,
 }

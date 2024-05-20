@@ -2,6 +2,7 @@
     "conventionalCommits.scopes": [
         "helpers",
         "decryption",
-        "ldap"
+        "ldap",
+        "settings"
     ]
 }
