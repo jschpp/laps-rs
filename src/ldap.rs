@@ -38,18 +38,6 @@ pub struct MsLapsPassword {
     pub password: String,
 }
 
-impl PartialOrd for MsLapsPassword {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.time.partial_cmp(&other.time)
-    }
-}
-
-impl PartialEq for MsLapsPassword {
-    fn eq(&self, other: &Self) -> bool {
-        self.username == other.username && self.time == other.time
-    }
-}
-
 fn filetime_deserializer<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
 where
     D: Deserializer<'de>,
@@ -136,7 +124,6 @@ pub fn retrieve_laps_info(
     }
 
     let entry = SearchEntry::construct(rs[0].clone());
-    let mut result: MsLapsPassword = MsLapsPassword::default();
 
     // At this point it could be the case that a single computer has an encrypted and an unencrypted password.
     // we need to take the one with the longer ExpirationTime
@@ -175,24 +162,13 @@ pub fn retrieve_laps_info(
             None
         };
 
-    if ms_laps_encrypted_password.is_some() && ms_laps_password.is_some() {
-        // in this case we need to check which password has the higher expiration time
-        let ms_laps_encrypted_password = ms_laps_encrypted_password.expect("is some");
-        let ms_laps_password = ms_laps_password.expect("is some");
-
-        // this will prefer the ms_laps_encrypted_password in case of equality
-        if ms_laps_password.time > ms_laps_encrypted_password.time {
-            result = ms_laps_password;
-        } else {
-            result = ms_laps_encrypted_password;
-        }
-    } else if ms_laps_encrypted_password.is_some() {
-        result = ms_laps_encrypted_password.expect("is some")
-    } else if ms_laps_password.is_some() {
-        result = ms_laps_password.expect("is some")
-    } else {
+    let result = [ms_laps_password, ms_laps_encrypted_password]
+        .into_iter()
+        .flatten()
+        .max_by_key(|pass| pass.time);
+    let Some(result) = result else {
         return Err(LapsError::Other(String::from("No Laps Password found")));
-    }
+    };
 
     ldap.unbind()
         .map_err(|e| LapsError::LdapError(e.to_string()))?;
