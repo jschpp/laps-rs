@@ -10,7 +10,6 @@ pub enum ConversionError {
 }
 
 #[derive(Debug, Error)]
-#[allow(unused)]
 pub enum DecryptionError {
     #[error("DPAPI had an error. Code: {0}")]
     DpapiFailedToDecrypt(HRESULT),
