@@ -1,5 +1,7 @@
-use super::error::ConversionError;
+// use super::error::ConversionError;
 use chrono::{DateTime, TimeDelta, Utc};
+
+use crate::LapsError;
 
 /// Converts a slice of u8 to a u32
 ///
@@ -8,9 +10,9 @@ use chrono::{DateTime, TimeDelta, Utc};
 ///
 /// # Errors
 /// Will `Err()` on inputs containing more than 4 bytes
-pub fn convert_to_uint32(data: &[u8]) -> Result<u32, ConversionError> {
+pub fn convert_to_uint32(data: &[u8]) -> Result<u32, LapsError> {
     if data.len() > 4 {
-        return Err(ConversionError::InputTooLarge);
+        return Err(LapsError::ConversionError("Input too large".into()));
     }
     Ok(data
         .iter()
@@ -56,7 +58,6 @@ mod uint_tests {
     fn should_err_on_invalid_input(#[case] input: &[u8]) {
         let e = convert_to_uint32(&input);
         assert!(e.is_err());
-        assert_eq!(e, Err(ConversionError::InputTooLarge));
     }
 }
 

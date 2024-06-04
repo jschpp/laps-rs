@@ -21,17 +21,14 @@ pub fn get_laps_info(
     let con_str = format!("{}://{}:{}", prot, settings.server, settings.port);
 
     // bind
-    let mut con: ldap3::LdapConn =
-        ldap3::LdapConn::new(&con_str).map_err(|e| LapsError::LdapError(e.to_string()))?;
-    con.sasl_gssapi_bind(&settings.server)
-        .map_err(|e| LapsError::LdapError(e.to_string()))?;
+    let mut con: ldap3::LdapConn = ldap3::LdapConn::new(&con_str)?;
+    con.sasl_gssapi_bind(&settings.server)?;
     let result = lookup_laps_info(
         computer_name,
         &mut con,
         &settings.search_base,
         settings.scope,
     );
-    con.unbind()
-        .map_err(|e| LapsError::LdapError(e.to_string()))?;
+    con.unbind()?;
     process_ldap_search_result(result)
 }

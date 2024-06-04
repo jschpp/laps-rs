@@ -4,7 +4,6 @@ use std::str::FromStr;
 
 use crate::{
     decryption::decrypt_password_blob_ng, error::LapsError, helpers::filetime_to_datetime,
-    ConversionError,
 };
 
 #[derive(serde::Deserialize, Debug, Clone, Copy)]
@@ -23,14 +22,14 @@ impl From<LdapProtocol> for &str {
 }
 
 impl FromStr for LdapProtocol {
-    type Err = ConversionError;
+    type Err = LapsError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "ldap" => Ok(LdapProtocol::Unsecure),
             "ldaps" => Ok(LdapProtocol::Secure),
-            _ => Err(ConversionError::Other(format!(
-                "unknown LdapProtocolType: {s}"
+            _ => Err(LapsError::ConversionError(format!(
+                "unknown LdapProtocol: {s}"
             ))),
         }
     }
@@ -144,14 +143,11 @@ pub async fn lookup_laps_info_async(
 pub fn process_ldap_search_result(
     search_result: Result<SearchResult, LdapError>,
 ) -> Result<MsLapsPassword, LapsError> {
-    let (rs, _res) = search_result
-        .map_err(|e| LapsError::LdapError(e.to_string()))?
-        .success()
-        .map_err(|e| LapsError::LdapError(e.to_string()))?;
+    let (rs, _res) = search_result?.success()?;
 
     // we expect exactly one result else we will err out
     if rs.len() != 1 {
-        return Err(LapsError::LdapError(String::from("Computer not found")));
+        return Err(LapsError::NotFound("Computer".into()));
     }
 
     let entry = SearchEntry::construct(
@@ -173,10 +169,7 @@ pub fn process_ldap_search_result(
                 .first()
                 .expect("msLAPS-EncryptedPassword exists")
                 .to_owned();
-            let decrypted_blob = match decrypt_password_blob_ng(&blob) {
-                Ok(value) => value,
-                Err(e) => return Err(LapsError::DecryptionError(e)),
-            };
+            let decrypted_blob = decrypt_password_blob_ng(&blob)?;
             Some(
                 serde_json::from_str(&decrypted_blob)
                     .expect("The decrypted msLAPS-EncryptedPassword is a valid JSON String"),
@@ -190,7 +183,7 @@ pub fn process_ldap_search_result(
         .flatten()
         .max_by_key(|pass| pass.time);
     let Some(result) = result else {
-        return Err(LapsError::Other(String::from("No Laps Password found")));
+        return Err(LapsError::NotFound("Laps password".into()));
     };
 
     Ok(result)

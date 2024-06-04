@@ -11,8 +11,8 @@ use windows_sys::{
 };
 
 use crate::{
-    error::DecryptionError,
     helpers::{convert_to_uint32, filetime_to_datetime},
+    LapsError,
 };
 
 #[derive(Debug, PartialEq)]
@@ -113,9 +113,9 @@ impl Drop for DroppablePointer {
 /// This function calls a bunch of `unsafe` internal windows functions.
 ///
 /// This function should be safe to call. Every return is checked for errors.
-pub fn decrypt_password_blob_ng(blob: &[u8]) -> Result<String, DecryptionError> {
+pub fn decrypt_password_blob_ng(blob: &[u8]) -> Result<String, LapsError> {
     let Some(mut attr) = EncryptedPasswordAttribute::try_from(blob) else {
-        return Err(DecryptionError::InvalidBufLen);
+        return Err(LapsError::BlobTooShort);
     };
     // at this point we have a parsed well defined header
 
@@ -157,7 +157,7 @@ pub fn decrypt_password_blob_ng(blob: &[u8]) -> Result<String, DecryptionError> 
 
     if uprotect_result != 0 {
         // there was an error decrypting the result
-        return Err(DecryptionError::DpapiFailedToDecrypt(uprotect_result));
+        return Err(LapsError::DpapiFailedToDecrypt(uprotect_result));
     }
 
     // at this point we know both the length of the buffer as well as the location of the buffer
@@ -165,7 +165,7 @@ pub fn decrypt_password_blob_ng(blob: &[u8]) -> Result<String, DecryptionError> 
         unsafe { std::slice::from_raw_parts(*buf_out_ptr.0, buf_out_len as usize) }.to_owned();
     if res.len() as u32 != buf_out_len {
         // there was some error within the slice copy process.
-        return Err(DecryptionError::InvalidBufLen);
+        return Err(LapsError::InvalidBufLen);
     }
 
     // at this point we should have copied everything we needed from the buffer and can free the memory allocated by NCryptUnprotectSecret
