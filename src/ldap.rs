@@ -1,9 +1,5 @@
 use chrono::{DateTime, Utc};
 use ldap3::{LdapConn, SearchEntry};
-use serde::{
-    de::{self, Visitor},
-    Deserialize, Deserializer,
-};
 use std::str::FromStr;
 
 use crate::{
@@ -11,7 +7,7 @@ use crate::{
     settings::AdSettings,
 };
 
-#[derive(Deserialize, Debug, Clone, Copy)]
+#[derive(serde::Deserialize, Debug, Clone, Copy)]
 pub enum LdapProtocol {
     Secure,
     Unsecure,
@@ -40,7 +36,7 @@ impl FromStr for LdapProtocol {
     }
 }
 
-#[derive(Deserialize, Default, Debug)]
+#[derive(serde::Deserialize, Default, Debug)]
 /// LAPS Information
 pub struct MsLapsPassword {
     #[serde(rename(deserialize = "n"))]
@@ -53,11 +49,11 @@ pub struct MsLapsPassword {
 
 fn filetime_deserializer<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
 where
-    D: Deserializer<'de>,
+    D: serde::Deserializer<'de>,
 {
     struct FieldVisitor;
 
-    impl<'de> Visitor<'de> for FieldVisitor {
+    impl<'de> serde::de::Visitor<'de> for FieldVisitor {
         type Value = DateTime<Utc>;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -69,7 +65,7 @@ where
             E: serde::de::Error,
         {
             let num: i64 = i64::from_str_radix(v, 16)
-                .map_err(|_| de::Error::custom("error converting datetime"))?;
+                .map_err(|_| serde::de::Error::custom("error converting datetime"))?;
             Ok(filetime_to_datetime(num))
         }
     }
