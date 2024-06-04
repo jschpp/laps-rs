@@ -1,10 +1,10 @@
 use chrono::{DateTime, Utc};
-use ldap3::{LdapConn, SearchEntry};
+use ldap3::{Ldap, LdapConn, LdapError, Scope, SearchEntry, SearchResult};
 use std::str::FromStr;
 
 use crate::{
     decryption::decrypt_password_blob_ng, error::LapsError, helpers::filetime_to_datetime,
-    settings::AdSettings,
+    ConversionError,
 };
 
 #[derive(serde::Deserialize, Debug, Clone, Copy)]
@@ -75,67 +75,90 @@ where
 
 /// This will try to retrieve the LAPS password information from Active Directory.
 ///
+/// This is a lower level function which expects a already bound and open [`LdapConn`] and will panic otherwise.
+///
 /// It will look for the following Attributes:
 /// ```plain
 /// msLAPS-Password
 /// msLAPS-EncryptedPassword
 /// msLAPS-PasswordExpirationTime
 /// ```
-/// In the case of a computer having both `msLAPS-Password` and `msLAPS-PasswordExpirationTime`
-/// it will return the password with the longer expiration time.
-///
-/// It will use your current users credential to decrypt the information if it was encrypted.
-/// The decryption uses [`NCryptUnprotectSecret()`](windows_sys::Win32::Security::Cryptography::NCryptUnprotectSecret) in the background
 ///
 /// # Panics
-/// This will panic if the password attributes within the AD are not valid JSON
-pub fn retrieve_laps_info(
+/// Will panic if con is closed
+pub fn lookup_laps_info(
     computer_name: &str,
-    con_settings: AdSettings,
-) -> Result<MsLapsPassword, LapsError> {
-    // construct ldap conncection uri
-    let prot = con_settings.protocol.to_string();
-    let con_str = format!("{}://{}:{}", prot, con_settings.server, con_settings.port);
-
-    // bind
-    let mut ldap: LdapConn =
-        LdapConn::new(&con_str).map_err(|e| LapsError::LdapError(e.to_string()))?;
-    ldap.sasl_gssapi_bind(&con_settings.server)
-        .map_err(|e| LapsError::LdapError(e.to_string()))?;
-
+    con: &mut LdapConn,
+    search_base: &str,
+    scope: Scope,
+) -> Result<SearchResult, LdapError> {
+    assert!(!con.is_closed());
     // perform search
     let filter = format!("(&(objectClass=computer)(Name={computer_name}))");
-    let search_result = ldap.search(
-        &con_settings.search_base,
-        con_settings.scope,
+    con.search(
+        search_base,
+        scope,
         &filter,
         vec![
             "msLAPS-Password",
             "msLAPS-EncryptedPassword",
             "msLAPS-PasswordExpirationTime",
         ],
-    );
+    )
+}
 
-    // handle search result
-    let Ok(search_result) = search_result else {
-        return Err(LapsError::LdapError(
-            search_result
-                .expect_err("search_result is not Ok()")
-                .to_string(),
-        ));
-    };
+/// See [`lookup_laps_info`]
+///
+/// This is the async version
+pub async fn lookup_laps_info_async(
+    computer_name: &str,
+    con: &mut Ldap,
+    search_base: &str,
+    scope: Scope,
+) -> Result<SearchResult, LdapError> {
+    assert!(!con.is_closed());
+    let filter = format!("(&(objectClass=computer)(Name={computer_name}))");
+    con.search(
+        search_base,
+        scope,
+        &filter,
+        vec![
+            "msLAPS-Password",
+            "msLAPS-EncryptedPassword",
+            "msLAPS-PasswordExpirationTime",
+        ],
+    )
+    .await
+}
 
-    let search_result = search_result.success();
-    let rs = match search_result {
-        Ok((rs, _res)) => rs,
-        Err(e) => return Err(LapsError::LdapError(e.to_string())),
-    };
+/// This will process the result of [`lookup_laps_info()`] or [`lookup_laps_info_async()`]
+///
+/// In the case of a computer having both `msLAPS-Password` and `msLAPS-EncryptedPassword`
+/// it will return the password with the longer expiration time preferring `msLAPS-EncryptedPassword`.
+///
+/// It will use your current users credential to decrypt the information if it was encrypted.
+/// The decryption uses [`NCryptUnprotectSecret()`](windows_sys::Win32::Security::Cryptography::NCryptUnprotectSecret) in the background
+///
+/// # Panics
+/// This will panic in case that Microsoft changes the internal representation of the two password fields from valid JSON to anything else
+pub fn process_ldap_search_result(
+    search_result: Result<SearchResult, LdapError>,
+) -> Result<MsLapsPassword, LapsError> {
+    let (rs, _res) = search_result
+        .map_err(|e| LapsError::LdapError(e.to_string()))?
+        .success()
+        .map_err(|e| LapsError::LdapError(e.to_string()))?;
 
+    // we expect exactly one result else we will err out
     if rs.len() != 1 {
-        Err(LapsError::LdapError(String::from("Computer not found")))?
+        return Err(LapsError::LdapError(String::from("Computer not found")));
     }
 
-    let entry = SearchEntry::construct(rs[0].clone());
+    let entry = SearchEntry::construct(
+        rs.first()
+            .expect("at least one Search result exists")
+            .to_owned(),
+    );
 
     // At this point it could be the case that a single computer has an encrypted and an unencrypted password.
     // we need to take the one with the longer ExpirationTime
@@ -148,7 +171,7 @@ pub fn retrieve_laps_info(
         if entry.bin_attrs.contains_key("msLAPS-EncryptedPassword") {
             let blob = entry.bin_attrs["msLAPS-EncryptedPassword"]
                 .first()
-                .expect("at least one entry should exist")
+                .expect("msLAPS-EncryptedPassword exists")
                 .to_owned();
             let decrypted_blob = match decrypt_password_blob_ng(&blob) {
                 Ok(value) => value,
@@ -169,9 +192,6 @@ pub fn retrieve_laps_info(
     let Some(result) = result else {
         return Err(LapsError::Other(String::from("No Laps Password found")));
     };
-
-    ldap.unbind()
-        .map_err(|e| LapsError::LdapError(e.to_string()))?;
 
     Ok(result)
 }
