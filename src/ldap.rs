@@ -4,6 +4,7 @@ use serde::{
     de::{self, Visitor},
     Deserialize, Deserializer,
 };
+use std::str::FromStr;
 
 use crate::{
     decryption::decrypt_password_blob_ng, error::LapsError, helpers::filetime_to_datetime,
@@ -16,11 +17,25 @@ pub enum LdapProtocol {
     Unsecure,
 }
 
-impl ToString for LdapProtocol {
-    fn to_string(&self) -> String {
-        match self {
-            LdapProtocol::Secure => String::from("ldaps"),
-            LdapProtocol::Unsecure => String::from("ldap"),
+impl From<LdapProtocol> for &str {
+    fn from(value: LdapProtocol) -> Self {
+        match value {
+            LdapProtocol::Secure => "ldaps",
+            LdapProtocol::Unsecure => "ldap",
+        }
+    }
+}
+
+impl FromStr for LdapProtocol {
+    type Err = ConversionError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "ldap" => Ok(LdapProtocol::Unsecure),
+            "ldaps" => Ok(LdapProtocol::Secure),
+            _ => Err(ConversionError::Other(format!(
+                "unknown LdapProtocolType: {s}"
+            ))),
         }
     }
 }

@@ -22,17 +22,17 @@ pub type LdapPort = usize;
 
 impl AdSettings {
     pub fn new(
-        server: &str,
+        server: impl Into<String>,
         port: LdapPort,
         protocol: LdapProtocol,
-        search_base: &str,
+        search_base: impl Into<String>,
         scope: ldap3::Scope,
     ) -> Self {
         Self {
-            server: server.to_owned(),
+            server: server.into(),
             port,
             protocol,
-            search_base: search_base.to_owned(),
+            search_base: search_base.into(),
             scope,
         }
     }
