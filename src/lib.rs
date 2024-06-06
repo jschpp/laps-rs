@@ -22,12 +22,18 @@ pub fn get_laps_info(
     // bind
     let mut con: ldap3::LdapConn = ldap3::LdapConn::new(&con_str)?;
     con.sasl_gssapi_bind(&settings.server)?;
+
+    // lookup
     let result = lookup_laps_info(
         computer_name,
         &mut con,
         &settings.search_base,
         settings.scope,
     );
+
+    // unbind
     con.unbind()?;
+
+    // process and decrypt (if necessary)
     process_ldap_search_result(result)
 }
