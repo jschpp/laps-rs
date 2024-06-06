@@ -35,7 +35,7 @@ impl FromStr for LdapProtocol {
     }
 }
 
-#[derive(serde::Deserialize, Default, Debug)]
+#[derive(serde::Deserialize, Debug)]
 /// LAPS Information
 pub struct MsLapsPassword {
     #[serde(rename(deserialize = "n"))]
