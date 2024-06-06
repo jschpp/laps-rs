@@ -36,6 +36,12 @@ impl AdSettings {
             scope,
         }
     }
+
+    /// This will construct a connection uri from the settings given
+    pub fn get_connection_uri(&self) -> String {
+        let protocol: &str = self.protocol.into();
+        format!("{}://{}:{}", protocol, self.server, self.port)
+    }
 }
 
 fn ldap_scope_deserializer<'de, D>(deserializer: D) -> Result<ldap3::Scope, D::Error>

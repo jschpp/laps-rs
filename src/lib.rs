@@ -17,8 +17,7 @@ pub fn get_laps_info(
     settings: AdSettings,
 ) -> Result<MsLapsPassword, LapsError> {
     // construct ldap connection uri
-    let prot: &str = settings.protocol.into();
-    let con_str = format!("{}://{}:{}", prot, settings.server, settings.port);
+    let con_str = settings.get_connection_uri();
 
     // bind
     let mut con: ldap3::LdapConn = ldap3::LdapConn::new(&con_str)?;
