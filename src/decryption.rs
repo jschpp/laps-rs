@@ -1,4 +1,5 @@
 #![deny(unsafe_op_in_unsafe_fn)]
+
 use chrono::{DateTime, Utc};
 use core::panic;
 use std::{mem, ptr, usize};
@@ -13,7 +14,7 @@ use windows_sys::{
 
 use crate::{
     helpers::{convert_to_uint32, filetime_to_datetime},
-    LapsError,
+    LapsError, MsLapsPassword,
 };
 
 #[derive(Debug, PartialEq)]
@@ -63,7 +64,7 @@ impl TryFrom<&[u8]> for EncryptedPasswordAttributePrefixInfo {
     }
 }
 
-struct EncryptedPasswordAttribute {
+pub(crate) struct EncryptedPasswordAttribute {
     _prefix: EncryptedPasswordAttributePrefixInfo,
     data: Vec<u8>,
 }
@@ -89,6 +90,21 @@ impl TryFrom<&[u8]> for EncryptedPasswordAttribute {
         Ok(Self {
             _prefix: prefix,
             data: value[16..(16 + encrypted_buffer_size)].to_owned(),
+        })
+    }
+}
+
+pub(crate) trait DecryptLapsPassword {
+    fn decrypt(attr: &EncryptedPasswordAttribute) -> Result<MsLapsPassword, LapsError>;
+}
+
+impl DecryptLapsPassword for EncryptedPasswordAttribute {
+    fn decrypt(pass: &EncryptedPasswordAttribute) -> Result<MsLapsPassword, LapsError> {
+        let parsed = decrypt_password_blob_ng(pass)?;
+        serde_json::from_str(&parsed).map_err(|_| {
+            LapsError::ConversionError(
+                "The decrypted msLAPS-EncryptedPassword is not a valid JSON String".into(),
+            )
         })
     }
 }
@@ -127,14 +143,11 @@ impl Drop for DroppablePointer {
 /// This function calls a bunch of `unsafe` internal windows functions.
 ///
 /// This function should be safe to call. Every return is checked for errors.
-pub fn decrypt_password_blob_ng(blob: &[u8]) -> Result<String, LapsError> {
-    let attr = EncryptedPasswordAttribute::try_from(blob)?;
-    // at this point we have a parsed well defined header
-
+fn decrypt_password_blob_ng(pass: &EncryptedPasswordAttribute) -> Result<String, LapsError> {
     // get the pointer to the data blob to hand to NCryptUnprotectSecret
     // this must be mut since NCryptUnprotectSecret expect a *mut
-    let buf_ptr = attr.data.as_ptr();
-    let buf_len = attr.data.len() as u32;
+    let buf_ptr = pass.data.as_ptr();
+    let buf_len = pass.data.len() as u32;
 
     // this pointer will be set by NCryptUnprotectSecret and will then point to the array of the encrypted bytes
     // DroppablePointer is used to call LocalFree() on drop

@@ -3,7 +3,9 @@ use ldap3::{Ldap, LdapConn, LdapError, Scope, SearchEntry, SearchResult};
 use std::str::FromStr;
 
 use crate::{
-    decryption::decrypt_password_blob_ng, error::LapsError, helpers::filetime_to_datetime,
+    decryption::{DecryptLapsPassword, EncryptedPasswordAttribute},
+    error::LapsError,
+    helpers::filetime_to_datetime,
 };
 
 #[derive(serde::Deserialize, Debug, Clone, Copy)]
@@ -158,22 +160,29 @@ pub fn process_ldap_search_result(
 
     // At this point it could be the case that a single computer has an encrypted and an unencrypted password.
     // we need to take the one with the longer ExpirationTime
-    let ms_laps_password = entry.attrs["msLAPS-Password"].first().map(|json_str| {
-        serde_json::from_str::<MsLapsPassword>(json_str)
-            .expect("msLAPS-Password is a valid JSON String")
-    });
+    let ms_laps_password: Option<MsLapsPassword> = if entry.attrs.contains_key("msLAPS-Password") {
+        let encoded_pass_info = entry.attrs["msLAPS-Password"]
+            .first()
+            .expect("msLAPS-Password attribute should contain at least one value");
+        Some(
+            serde_json::from_str::<MsLapsPassword>(encoded_pass_info).map_err(|_| {
+                LapsError::ConversionError("msLAPS-Password is not a valid JSON String".into())
+            })?,
+        )
+    } else {
+        None
+    };
 
     let ms_laps_encrypted_password: Option<MsLapsPassword> =
         if entry.bin_attrs.contains_key("msLAPS-EncryptedPassword") {
             let blob = entry.bin_attrs["msLAPS-EncryptedPassword"]
                 .first()
-                .expect("msLAPS-EncryptedPassword exists")
-                .to_owned();
-            let decrypted_blob = decrypt_password_blob_ng(&blob)?;
-            Some(
-                serde_json::from_str(&decrypted_blob)
-                    .expect("The decrypted msLAPS-EncryptedPassword is a valid JSON String"),
-            )
+                .expect("msLAPS-EncryptedPassword attribute should contain at least one value")
+                .as_slice();
+            let encrypted_password_info = EncryptedPasswordAttribute::try_from(blob)?;
+            Some(EncryptedPasswordAttribute::decrypt(
+                &encrypted_password_info,
+            )?)
         } else {
             None
         };
