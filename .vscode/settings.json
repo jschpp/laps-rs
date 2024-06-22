@@ -3,6 +3,6 @@
         "helpers",
         "decryption",
         "ldap",
-        "settings"
+        "types"
     ]
 }

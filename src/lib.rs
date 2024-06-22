@@ -4,7 +4,7 @@ mod decryption;
 mod error;
 mod helpers;
 mod ldap;
-mod settings;
+mod types;
 
 pub use error::*;
 pub use ldap::{
@@ -12,7 +12,7 @@ pub use ldap::{
     MsLapsPassword,
 };
 pub use ldap3::Scope;
-pub use settings::*;
+pub use types::*;
 
 pub fn get_laps_info(
     computer_name: &str,
