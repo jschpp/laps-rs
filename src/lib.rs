@@ -7,10 +7,7 @@ mod ldap;
 mod types;
 
 pub use error::*;
-pub use ldap::{
-    lookup_laps_info, lookup_laps_info_async, process_ldap_search_result, LdapProtocol,
-    MsLapsPassword,
-};
+pub use ldap::{lookup_laps_info, lookup_laps_info_async, process_ldap_search_result};
 pub use ldap3::Scope;
 pub use types::*;
 

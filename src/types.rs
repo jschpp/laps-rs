@@ -1,6 +1,9 @@
+use std::str::FromStr;
+
+use chrono::{DateTime, Utc};
 use serde::{de::Visitor, Deserialize, Deserializer};
 
-use crate::ldap::LdapProtocol;
+use crate::{helpers::filetime_to_datetime, LapsError};
 
 #[derive(Debug, Deserialize, Clone)]
 /// Settings needed by [`ldap3`](mod@ldap3) to successfully connect and search the Active Directory
@@ -74,4 +77,70 @@ where
         }
     }
     deserializer.deserialize_str(ScopeVisitor)
+}
+
+#[derive(serde::Deserialize, Debug)]
+/// LAPS Information
+pub struct MsLapsPassword {
+    #[serde(rename(deserialize = "n"))]
+    pub username: String,
+    #[serde(rename(deserialize = "t"), deserialize_with = "filetime_deserializer")]
+    pub time: DateTime<Utc>,
+    #[serde(rename(deserialize = "p"))]
+    pub password: String,
+}
+
+fn filetime_deserializer<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct FieldVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for FieldVisitor {
+        type Value = DateTime<Utc>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("test?")
+        }
+
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            let num: i64 = i64::from_str_radix(v, 16)
+                .map_err(|_| serde::de::Error::custom("error converting datetime"))?;
+            Ok(filetime_to_datetime(num))
+        }
+    }
+
+    deserializer.deserialize_string(FieldVisitor)
+}
+
+#[derive(serde::Deserialize, Debug, Clone, Copy)]
+pub enum LdapProtocol {
+    Secure,
+    Unsecure,
+}
+
+impl From<LdapProtocol> for &str {
+    fn from(value: LdapProtocol) -> Self {
+        match value {
+            LdapProtocol::Secure => "ldaps",
+            LdapProtocol::Unsecure => "ldap",
+        }
+    }
+}
+
+impl FromStr for LdapProtocol {
+    type Err = LapsError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "ldap" => Ok(LdapProtocol::Unsecure),
+            "ldaps" => Ok(LdapProtocol::Secure),
+            _ => Err(LapsError::ConversionError(format!(
+                "unknown LdapProtocol: {s}"
+            ))),
+        }
+    }
 }
