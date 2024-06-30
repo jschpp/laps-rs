@@ -1,14 +1,14 @@
-use ldap3::{Ldap, LdapConn, LdapError, Scope, SearchEntry, SearchResult};
+use ldap3::{LdapError, Scope, SearchEntry, SearchResult};
 
 use crate::{
     decryption::{DecryptLapsPassword, EncryptedPasswordAttribute},
     error::LapsError,
-    MsLapsPassword,
+    AdConnection, AdConnectionAsync, MsLapsPassword,
 };
 
 /// This will try to retrieve the LAPS password information from Active Directory.
 ///
-/// This is a lower level function which expects a already bound and open [`LdapConn`] and will panic otherwise.
+/// This is a lower level function which expects a already bound and open [`AdConnection`] and will panic otherwise.
 ///
 /// It will look for the following Attributes:
 /// ```plain
@@ -17,18 +17,21 @@ use crate::{
 /// msLAPS-PasswordExpirationTime
 /// ```
 ///
+/// # Result
+/// The result of this function is designed to be consumed by [`process_ldap_search_result`]
+///
 /// # Panics
 /// Will panic if con is closed
 pub fn lookup_laps_info(
     computer_name: &str,
-    con: &mut LdapConn,
+    con: &mut AdConnection,
     search_base: &str,
     scope: Scope,
 ) -> Result<SearchResult, LdapError> {
-    assert!(!con.is_closed());
+    assert!(!con.ldap.is_closed());
     // perform search
     let filter = format!("(&(objectClass=computer)(Name={computer_name}))");
-    con.search(
+    con.ldap.search(
         search_base,
         scope,
         &filter,
@@ -45,23 +48,24 @@ pub fn lookup_laps_info(
 /// This is the async version
 pub async fn lookup_laps_info_async(
     computer_name: &str,
-    con: &mut Ldap,
+    con: &mut AdConnectionAsync,
     search_base: &str,
     scope: Scope,
 ) -> Result<SearchResult, LdapError> {
-    assert!(!con.is_closed());
+    assert!(!con.ldap.is_closed());
     let filter = format!("(&(objectClass=computer)(Name={computer_name}))");
-    con.search(
-        search_base,
-        scope,
-        &filter,
-        vec![
-            "msLAPS-Password",
-            "msLAPS-EncryptedPassword",
-            "msLAPS-PasswordExpirationTime",
-        ],
-    )
-    .await
+    con.ldap
+        .search(
+            search_base,
+            scope,
+            &filter,
+            vec![
+                "msLAPS-Password",
+                "msLAPS-EncryptedPassword",
+                "msLAPS-PasswordExpirationTime",
+            ],
+        )
+        .await
 }
 
 /// This will process the result of [`lookup_laps_info()`] or [`lookup_laps_info_async()`]

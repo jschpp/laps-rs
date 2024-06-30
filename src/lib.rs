@@ -20,7 +20,8 @@ pub fn get_laps_info(
 
     // bind
     let mut con: ldap3::LdapConn = ldap3::LdapConn::new(&con_str)?;
-    con.sasl_gssapi_bind(&settings.server)?;
+    con.sasl_gssapi_bind(&settings.server_fqdn)?;
+    let mut con = AdConnection { ldap: con };
 
     // lookup
     let result = lookup_laps_info(
@@ -31,7 +32,7 @@ pub fn get_laps_info(
     );
 
     // unbind
-    con.unbind()?;
+    con.ldap.unbind()?;
 
     // process and decrypt (if necessary)
     process_ldap_search_result(result)

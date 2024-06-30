@@ -1,15 +1,63 @@
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
+use ldap3::{tokio, Ldap, LdapConn, LdapConnAsync};
 use serde::{de::Visitor, Deserialize, Deserializer};
+use tracing::warn;
 
-use crate::{helpers::filetime_to_datetime, LapsError};
+use crate::{
+    helpers::filetime_to_datetime, lookup_laps_info, lookup_laps_info_async,
+    process_ldap_search_result, LapsError,
+};
+
+#[derive(Debug)]
+pub struct AdConnection {
+    pub(crate) ldap: LdapConn,
+}
+
+#[derive(Clone, Debug)]
+pub struct AdConnectionAsync {
+    pub(crate) ldap: Ldap,
+}
+
+impl AdConnection {
+    pub fn try_search(
+        &mut self,
+        computer_name: &str,
+        ad_settings: &AdSettings,
+    ) -> Result<MsLapsPassword, LapsError> {
+        let rs = lookup_laps_info(
+            computer_name,
+            self,
+            &ad_settings.search_base,
+            ad_settings.scope,
+        );
+        process_ldap_search_result(rs)
+    }
+}
+
+impl AdConnectionAsync {
+    pub async fn try_search(
+        &mut self,
+        computer_name: &str,
+        ad_settings: &AdSettings,
+    ) -> Result<MsLapsPassword, LapsError> {
+        let rs = lookup_laps_info_async(
+            computer_name,
+            self,
+            &ad_settings.search_base,
+            ad_settings.scope,
+        )
+        .await;
+        process_ldap_search_result(rs)
+    }
+}
 
 #[derive(Debug, Deserialize, Clone)]
 /// Settings needed by [`ldap3`](mod@ldap3) to successfully connect and search the Active Directory
 pub struct AdSettings {
     /// Server FQDN
-    pub server: String,
+    pub server_fqdn: String,
     /// LDAP Port (in most cases either 389 or 636)
     pub port: LdapPort,
     /// if this is true use the `ldaps:\\` protocol
@@ -32,7 +80,7 @@ impl AdSettings {
         scope: ldap3::Scope,
     ) -> Self {
         Self {
-            server: server.into(),
+            server_fqdn: server.into(),
             port,
             protocol,
             search_base: search_base.into(),
@@ -43,7 +91,25 @@ impl AdSettings {
     /// This will construct a connection uri from the settings given
     pub fn get_connection_uri(&self) -> String {
         let protocol: &str = self.protocol.into();
-        format!("{}://{}:{}", protocol, self.server, self.port)
+        format!("{}://{}:{}", protocol, self.server_fqdn, self.port)
+    }
+
+    pub fn connect(&self) -> Result<AdConnection, LapsError> {
+        let con_str = self.get_connection_uri();
+        let mut con = LdapConn::new(&con_str)?;
+        con.sasl_gssapi_bind(&self.server_fqdn)?;
+        Ok(AdConnection { ldap: con })
+    }
+
+    pub async fn connect_async(&self) -> Result<AdConnectionAsync, LapsError> {
+        let (ldap_con, mut ldap) = LdapConnAsync::new(&self.get_connection_uri()).await?;
+        tokio::spawn(async move {
+            if let Err(e) = ldap_con.drive().await {
+                warn!("LDAP connection error: {}", e);
+            }
+        });
+        ldap.sasl_gssapi_bind(&self.server_fqdn).await?;
+        Ok(AdConnectionAsync { ldap })
     }
 }
 
@@ -79,7 +145,7 @@ where
     deserializer.deserialize_str(ScopeVisitor)
 }
 
-#[derive(serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 /// LAPS Information
 pub struct MsLapsPassword {
     #[serde(rename(deserialize = "n"))]
