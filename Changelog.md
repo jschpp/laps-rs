@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+* Update `Cargo.toml` to use a license specifier instead of the `license-file` directive
+
 ## 0.1.0
 
 Initial Release
