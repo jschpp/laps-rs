@@ -1,9 +1,5 @@
 # laps-rs
 
-## Current Version
-
-0.1.0
-
 Library for the retrieval of [LAPS](https://learn.microsoft.com/en-us/windows-server/identity/laps/laps-overview) passwords
 
 Central for that are the two structs [`AdConnection`] and [`AdConnectionAsync`] which hold a connection to the Active Directory and implement `try_search()`
@@ -13,7 +9,7 @@ Central for that are the two structs [`AdConnection`] and [`AdConnectionAsync`] 
 In `Cargo.toml`:
 ```toml
 [dependencies.laps_rs]
-version = 0.1.0
+version = "0.1.0"
 ```
 
 ## Example
@@ -68,3 +64,7 @@ computer [`process_ldap_search_result()`] will prefer the encrypted information 
 an identical password expiration.
 
 In any other case the password with the longer expiration will be returned.
+
+## Current Version
+
+0.1.0

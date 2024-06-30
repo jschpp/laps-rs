@@ -1,7 +1,7 @@
 # {{crate}}
 
+{{readme}}
+
 ## Current Version
 
 {{version}}
-
-{{readme}}
