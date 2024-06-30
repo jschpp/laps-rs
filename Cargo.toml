@@ -9,7 +9,7 @@ license-file = "LICENSE"
 description = "Library for the retrieval of LAPS passwords"
 keywords = ["ldap", "ActiveDirectory", "Windows", "client"]
 categories = ["network-programming", "os::windows-apis"]
-exclude = [".vscode/*", ".gitignore"]
+exclude = [".vscode/*", ".gitignore", "README.tpl"]
 
 [dependencies]
 chrono = { version = "0.4.38", features = ["serde"] }
