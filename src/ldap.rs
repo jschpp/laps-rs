@@ -1,82 +1,14 @@
-use chrono::{DateTime, Utc};
-use ldap3::{Ldap, LdapConn, LdapError, Scope, SearchEntry, SearchResult};
-use std::str::FromStr;
+use ldap3::{LdapError, Scope, SearchEntry, SearchResult};
 
 use crate::{
     decryption::{DecryptLapsPassword, EncryptedPasswordAttribute},
     error::LapsError,
-    helpers::filetime_to_datetime,
+    AdConnection, AdConnectionAsync, MsLapsPassword,
 };
-
-#[derive(serde::Deserialize, Debug, Clone, Copy)]
-pub enum LdapProtocol {
-    Secure,
-    Unsecure,
-}
-
-impl From<LdapProtocol> for &str {
-    fn from(value: LdapProtocol) -> Self {
-        match value {
-            LdapProtocol::Secure => "ldaps",
-            LdapProtocol::Unsecure => "ldap",
-        }
-    }
-}
-
-impl FromStr for LdapProtocol {
-    type Err = LapsError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "ldap" => Ok(LdapProtocol::Unsecure),
-            "ldaps" => Ok(LdapProtocol::Secure),
-            _ => Err(LapsError::ConversionError(format!(
-                "unknown LdapProtocol: {s}"
-            ))),
-        }
-    }
-}
-
-#[derive(serde::Deserialize, Debug)]
-/// LAPS Information
-pub struct MsLapsPassword {
-    #[serde(rename(deserialize = "n"))]
-    pub username: String,
-    #[serde(rename(deserialize = "t"), deserialize_with = "filetime_deserializer")]
-    pub time: DateTime<Utc>,
-    #[serde(rename(deserialize = "p"))]
-    pub password: String,
-}
-
-fn filetime_deserializer<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    struct FieldVisitor;
-
-    impl<'de> serde::de::Visitor<'de> for FieldVisitor {
-        type Value = DateTime<Utc>;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("test?")
-        }
-
-        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-        where
-            E: serde::de::Error,
-        {
-            let num: i64 = i64::from_str_radix(v, 16)
-                .map_err(|_| serde::de::Error::custom("error converting datetime"))?;
-            Ok(filetime_to_datetime(num))
-        }
-    }
-
-    deserializer.deserialize_string(FieldVisitor)
-}
 
 /// This will try to retrieve the LAPS password information from Active Directory.
 ///
-/// This is a lower level function which expects a already bound and open [`LdapConn`] and will panic otherwise.
+/// This is a lower level function which expects a already bound and open [`AdConnection`] and will panic otherwise.
 ///
 /// It will look for the following Attributes:
 /// ```plain
@@ -85,18 +17,21 @@ where
 /// msLAPS-PasswordExpirationTime
 /// ```
 ///
+/// # Result
+/// The result of this function is designed to be consumed by [`process_ldap_search_result`]
+///
 /// # Panics
 /// Will panic if con is closed
 pub fn lookup_laps_info(
     computer_name: &str,
-    con: &mut LdapConn,
+    con: &mut AdConnection,
     search_base: &str,
     scope: Scope,
 ) -> Result<SearchResult, LdapError> {
-    assert!(!con.is_closed());
+    assert!(!con.ldap.is_closed());
     // perform search
     let filter = format!("(&(objectClass=computer)(Name={computer_name}))");
-    con.search(
+    con.ldap.search(
         search_base,
         scope,
         &filter,
@@ -113,23 +48,24 @@ pub fn lookup_laps_info(
 /// This is the async version
 pub async fn lookup_laps_info_async(
     computer_name: &str,
-    con: &mut Ldap,
+    con: &mut AdConnectionAsync,
     search_base: &str,
     scope: Scope,
 ) -> Result<SearchResult, LdapError> {
-    assert!(!con.is_closed());
+    assert!(!con.ldap.is_closed());
     let filter = format!("(&(objectClass=computer)(Name={computer_name}))");
-    con.search(
-        search_base,
-        scope,
-        &filter,
-        vec![
-            "msLAPS-Password",
-            "msLAPS-EncryptedPassword",
-            "msLAPS-PasswordExpirationTime",
-        ],
-    )
-    .await
+    con.ldap
+        .search(
+            search_base,
+            scope,
+            &filter,
+            vec![
+                "msLAPS-Password",
+                "msLAPS-EncryptedPassword",
+                "msLAPS-PasswordExpirationTime",
+            ],
+        )
+        .await
 }
 
 /// This will process the result of [`lookup_laps_info()`] or [`lookup_laps_info_async()`]
