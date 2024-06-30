@@ -1,3 +1,6 @@
+#[cfg(not(windows))]
+compile_error!("This library only supports windows!");
+
 mod decryption;
 mod error;
 mod helpers;
