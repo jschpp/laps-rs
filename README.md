@@ -7,6 +7,7 @@ Central for that are the two structs [`AdConnection`] and [`AdConnectionAsync`] 
 ## Usage
 
 In `Cargo.toml`:
+
 ```toml
 [dependencies.laps_rs]
 version = "0.1.0"
@@ -17,6 +18,7 @@ version = "0.1.0"
 Both examples perform a search for `"computername"`
 
 ### Synchronous search
+
 ```rust
 use laps_rs::{AdSettings, AdConnection, LdapProtocol, Scope};
 
