@@ -10,17 +10,31 @@ use crate::{
     process_ldap_search_result, LapsError,
 };
 
+/// Connection to the Active Directory
+///
+/// will be constructed by [`AdSettings::connect()`]
+///
+/// for searching see [`AdConnection::try_search()`]
 #[derive(Debug)]
 pub struct AdConnection {
     pub(crate) ldap: LdapConn,
 }
 
+/// Async connection to the Active Directory
+///
+/// will be constructed by [`AdSettings::connect_async()`]
+///
+/// for searching see [`AdConnectionAsync::try_search()`]
 #[derive(Clone, Debug)]
 pub struct AdConnectionAsync {
     pub(crate) ldap: Ldap,
 }
 
 impl AdConnection {
+    /// Will perform a search for the LAPS credentials for given computer by computer name.
+    ///
+    /// This search calls [`lookup_laps_info()`] in the background and will then process the result with
+    /// [`process_ldap_search_result()`]
     pub fn try_search(
         &mut self,
         computer_name: &str,
@@ -37,6 +51,10 @@ impl AdConnection {
 }
 
 impl AdConnectionAsync {
+    /// Will perform a search for the LAPS credentials for given computer by computer name.
+    ///
+    /// This search calls [`lookup_laps_info_async()`] in the background and will then process the result with
+    /// [`process_ldap_search_result()`]
     pub async fn try_search(
         &mut self,
         computer_name: &str,
@@ -60,7 +78,10 @@ pub struct AdSettings {
     pub server_fqdn: String,
     /// LDAP Port (in most cases either 389 or 636)
     pub port: LdapPort,
-    /// if this is true use the `ldaps:\\` protocol
+    /// Will use the following protocols for the ldap connection
+    ///
+    /// * [`LdapProtocol::Secure`] => `ldaps://`
+    /// * [`LdapProtocol::Unsecure`] => `ldap://`
     pub protocol: LdapProtocol,
     /// LDAP search base where to search for the computer
     pub search_base: String,
@@ -94,6 +115,14 @@ impl AdSettings {
         format!("{}://{}:{}", protocol, self.server_fqdn, self.port)
     }
 
+    /// Opens a new [`ldap3::LdapConn`] connection with the given settings.
+    ///
+    /// This connection is synchronous will be `sasl_gssapi` bound with the credentials of the user running the process.
+    ///
+    /// Those same credentials will be used to decrypt the LAPS password information.
+    /// # Error
+    ///
+    /// Will return a [`LapsError`] if the connection fails
     pub fn connect(&self) -> Result<AdConnection, LapsError> {
         let con_str = self.get_connection_uri();
         let mut con = LdapConn::new(&con_str)?;
@@ -101,6 +130,15 @@ impl AdSettings {
         Ok(AdConnection { ldap: con })
     }
 
+    /// Opens a new [`ldap3::Ldap`] connection with the given settings.
+    ///
+    /// This connection is asynchronous will be `sasl_gssapi` bound with the credentials of the user running the process.
+    ///
+    /// Those same credentials will be used to decrypt the LAPS password information.
+    ///
+    /// # Error
+    ///
+    /// Will return a [`LapsError`] if the connection fails
     pub async fn connect_async(&self) -> Result<AdConnectionAsync, LapsError> {
         let (ldap_con, mut ldap) = LdapConnAsync::new(&self.get_connection_uri()).await?;
         tokio::spawn(async move {
@@ -148,10 +186,16 @@ where
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 /// LAPS Information
 pub struct MsLapsPassword {
+    /// Username of the administrative user managed by LAPS
     #[serde(rename(deserialize = "n"))]
     pub username: String,
+    /// Expiration time of the password.
+    ///
+    /// Can be in the past in case of a computer being disconnected from the AD for a
+    /// longer time
     #[serde(rename(deserialize = "t"), deserialize_with = "filetime_deserializer")]
     pub time: DateTime<Utc>,
+    /// The LAPS password
     #[serde(rename(deserialize = "p"))]
     pub password: String,
 }
