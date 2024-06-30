@@ -1,5 +1,4 @@
-#[cfg(not(windows))]
-compile_error!("This library only supports windows!");
+#![cfg(windows)]
 
 mod decryption;
 mod error;
