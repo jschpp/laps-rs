@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+* Moved the `LocalFree()` call of the `DroppablePointer` into `drop()`. This will panic in debug mode on error
+
+### Removed
+
+* Remove `local_free()` from private API
+
 ## [0.1.1] - 2024-06-30
 
 ### Added

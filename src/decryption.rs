@@ -130,7 +130,13 @@ impl Drop for DroppablePointer {
         // Double free should also not happen since this is the drop() call and that will be checked by rustc
         // In case the pointer was not allocated at all and still is a NULL pointer this will also not fail.
         // see also https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-localfree#remarks
-        unsafe { local_free(self.0) }
+        if unsafe { LocalFree(self.0 as HLOCAL) }.is_null() {
+            return;
+        }
+        if cfg!(debug_assertions) {
+            let err = unsafe { GetLastError() };
+            panic!("bug: undefined behavior: freeing {:?} failed. Err Code: {err} (typically this means the pointer didn't belong to the allocator, or there was heap corruption)", self.0);
+        }
     }
 }
 
@@ -227,24 +233,6 @@ fn decrypt_password_blob_ng(pass: &EncryptedPasswordAttribute) -> Result<String,
     let _ = res.pop();
     String::from_utf16(&res)
         .map_err(|_| LapsError::ConversionError("Conversion from UTF16 failed".into()))
-}
-
-/// will try to free the memory behind the pointer
-///
-/// # Safety
-/// This should only be called for Memory regions allocated by LocalAlloc().
-unsafe fn local_free(buf_out_ptr: *mut *mut u8) {
-    // free memory allocated by NCryptUnprotectSecret
-    // see: parameter `[in, optional] pMemPara` here: https://learn.microsoft.com/en-us/windows/win32/api/ncryptprotect/nf-ncryptprotect-ncryptunprotectsecret#parameters
-    // https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-localfree
-    // safety:
-    let ret: HLOCAL = unsafe { LocalFree(buf_out_ptr as HLOCAL) };
-    if !ret.is_null() {
-        // This will only happen if this function gets called with an invalid memory handle.
-        // We can't do anything about that. So we log it and simply hope it won't happen.
-        let err = unsafe { GetLastError() };
-        eprintln!("Error freeing memory {}", err,);
-    };
 }
 
 #[cfg(test)]
