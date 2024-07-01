@@ -1,7 +1,7 @@
 [package]
 authors = ["Johannes Schoepp <darkdiscover@gmail.com>"]
 name = "laps-rs"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 readme = "README.md"
 repository = "https://github.com/jschpp/laps-rs"

@@ -1,5 +1,7 @@
 # laps-rs
 
+THIS CRATE IS WINDOWS ONLY!
+
 Library for the retrieval of [LAPS](https://learn.microsoft.com/en-us/windows-server/identity/laps/laps-overview) passwords
 
 Central for that are the two structs [`AdConnection`] and [`AdConnectionAsync`] which hold a connection to the Active Directory and implement `try_search()`
@@ -69,4 +71,4 @@ In any other case the password with the longer expiration will be returned.
 
 ## Current Version
 
-0.1.0
+0.1.2
