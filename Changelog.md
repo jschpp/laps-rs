@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 * Moved the `LocalFree()` call of the `DroppablePointer` into `drop()`. This will panic in debug mode on error
+* Added `default-target` to `package.metadata`
 
 ### Removed
 
